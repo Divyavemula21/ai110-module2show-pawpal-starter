@@ -103,7 +103,7 @@ pytest --cov
 Sample test output:
 
 
-# Paste your pytest output here
+# pytest output here
 
 ============================= test session starts ==============================
 collected 5 items
