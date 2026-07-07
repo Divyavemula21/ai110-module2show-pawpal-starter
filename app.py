@@ -1,5 +1,4 @@
 import streamlit as st
-
 from pawpal_system import Owner, Pet, CareTask, ScheduleManager
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
@@ -53,10 +52,12 @@ with st.form("pet_form", clear_on_submit=True):
         species = st.selectbox("Species", ["dog", "cat", "other"])
     with col3:
         age = st.number_input("Age", min_value=0, max_value=50, value=1)
+        
     if st.form_submit_button("Add pet"):
         if pet_name.strip():
+            # Dynamically creates a Pet object and registers it to the owner
             owner.add_pet(Pet(pet_name.strip(), species, int(age)))
-            st.success(f"Added {pet_name.strip()}.")
+            st.success(f"Successfully added {pet_name.strip()}!")
         else:
             st.warning("Please enter a pet name.")
 
@@ -72,7 +73,9 @@ else:
             "For which pet?",
             options=[p.name for p in owner.pets],
         )
+        # Find the correct pet object matching the name picked from dropdown
         pet_choice = next(p for p in owner.pets if p.name == selected_name)
+        
         col1, col2 = st.columns(2)
         with col1:
             task_title = st.text_input("Task title", value="Morning walk")
@@ -82,20 +85,20 @@ else:
         with col2:
             frequency = st.selectbox("Frequency", ["daily", "weekly", "monthly"])
             priority = st.selectbox("Priority", ["high", "medium", "low"])
-        if st.form_submit_button("Add task"):
+            
+        if st.form_submit_button("Schedule Task"):
             if task_title.strip():
+                # Add the care task to the targeted pet
                 pet_choice.add_task(
                     CareTask(task_title.strip(), int(duration), frequency, priority)
                 )
-                st.success(f"Added '{task_title.strip()}' to {pet_choice.name}.")
+                st.success(f"Task scheduled successfully! Added '{task_title.strip()}' to {pet_choice.name}.")
             else:
                 st.warning("Please enter a task title.")
 
 st.divider()
 
 # --- Current pets & tasks ----------------------------------------------------
-# Rendered after the forms above, so any change made this run (Streamlit reruns
-# on every submit) is already reflected here.
 st.subheader("🏠 Current pets & tasks")
 if not owner.pets:
     st.info("No pets yet.")

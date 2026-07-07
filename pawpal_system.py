@@ -16,9 +16,11 @@ The scheduler does NOT own tasks; it pulls them from the pets at plan time.
 """
 
 from dataclasses import dataclass, field
+from datetime import date, timedelta
+from typing import List, Dict, Any, Optional
 
 # Priority labels mapped to a sort weight (higher = more important).
-PRIORITY_WEIGHT = {"high": 3, "medium": 2, "low": 1}
+PRIORITY_WEIGHT: Dict[str, int] = {"high": 3, "medium": 2, "low": 1}
 
 
 @dataclass
@@ -33,10 +35,13 @@ class CareTask:
     duration: int                 # the time it takes, in minutes (must be > 0)
     frequency: str = "daily"      # e.g. "daily", "weekly", "monthly"
     priority: str = "medium"      # "high" | "medium" | "low"
-    is_completed: bool = False
+    is_completed: bool = False 
+    due_date: date = field(default_factory=date.today)
+    time: str = "08:00"           # format: "HH:MM"
+    
     # Back-reference to the pet this task belongs to. Set by Pet.add_task().
     # repr/compare excluded to avoid Pet<->CareTask recursion and identity surprises.
-    pet: "Pet" = field(default=None, repr=False, compare=False)
+    pet: Optional["Pet"] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Validate the task's duration right after construction."""
@@ -75,7 +80,7 @@ class Pet:
     name: str
     pet_type: str = "other"
     age: int = 0
-    tasks: list = field(default_factory=list)   # list[CareTask]
+    tasks: List[CareTask] = field(default_factory=list)
 
     def get_profile_summary(self) -> str:
         """Return a short, readable summary of the pet."""
@@ -98,13 +103,11 @@ class Owner:
     name: str
     available_hours: float = 0.0
     preferences: dict = field(default_factory=dict)
-    pets: list = field(default_factory=list)              # list[Pet]
-    schedule: "ScheduleManager" = None                    # set in __post_init__
+    pets: List[Pet] = field(default_factory=list)
+    schedule: Optional["ScheduleManager"] = None  # set in __post_init__
 
     def __post_init__(self) -> None:
         """Give the owner their own scheduler if one wasn't supplied."""
-        # Done here (not as a default factory) so ScheduleManager only needs
-        # to exist at instantiation time.
         if self.schedule is None:
             self.schedule = ScheduleManager()
 
@@ -112,7 +115,7 @@ class Owner:
         """Register a pet this owner cares for."""
         self.pets.append(pet)
 
-    def all_tasks(self) -> list:
+    def all_tasks(self) -> List[CareTask]:
         """Every task across every pet, flattened into one list."""
         return [task for pet in self.pets for task in pet.tasks]
 
@@ -131,32 +134,108 @@ class Owner:
 class ScheduleManager:
     """The brain: retrieves, organizes, and schedules tasks across pets."""
 
-    daily_plan: list = field(default_factory=list)          # list[CareTask]
+    daily_plan: List[CareTask] = field(default_factory=list)
     # Incomplete tasks considered in the most recent run (for the explanation).
-    _considered: list = field(default_factory=list, repr=False)
+    _considered: List[CareTask] = field(default_factory=list, repr=False)
+    # Cache detected warnings from the latest schedule configuration.
+    _active_warnings: List[str] = field(default_factory=list, repr=False)
 
-    def collect_tasks(self, owner: Owner) -> list:
+    def collect_tasks(self, owner: Owner) -> List[CareTask]:
         """Retrieve every incomplete task across all of the owner's pets."""
         return [t for t in owner.all_tasks() if not t.is_completed]
+    
+    def sort_by_time(self, owner: Owner) -> List[CareTask]:
+        """Return incomplete tasks sorted chronologically by due date and time."""
+        tasks = self.collect_tasks(owner)
+        return sorted(tasks, key=lambda task: (task.due_date, task.time))
 
-    def generate_daily_schedule(self, owner: Owner, available_minutes: int = None) -> list:
+    def filter_tasks(self, owner: Owner, pet_name: str = "All", completed: Optional[bool] = None) -> List[CareTask]:
+        """Filter tasks dynamically by pet name and completion status."""
+        tasks = owner.all_tasks()
+
+        if pet_name != "All":
+            tasks = [task for task in tasks if task.pet and task.pet.name == pet_name]
+
+        if completed is not None:
+            tasks = [task for task in tasks if task.is_completed == completed]
+
+        return tasks
+
+    def complete_task_and_recur(self, task: CareTask) -> Optional[CareTask]:
+        """Mark a task complete and automatically schedule its next occurrence."""
+        task.mark_complete()
+        frequency = task.frequency.lower()
+
+        if frequency == "daily":
+            next_date = task.due_date + timedelta(days=1)
+        elif frequency == "weekly":
+            next_date = task.due_date + timedelta(days=7)
+        elif frequency == "monthly":
+            # Approximating monthly frequency safely by shifting forward 30 days
+            next_date = task.due_date + timedelta(days=30)
+        else:
+            return None
+
+        new_task = CareTask(
+            title=task.title,
+            duration=task.duration,
+            frequency=task.frequency,
+            priority=task.priority,
+            due_date=next_date,
+            time=task.time
+        )
+
+        if task.pet:
+            task.pet.add_task(new_task)
+
+        return new_task
+
+    def check_conflicts(self, owner: Owner) -> List[str]:
+        """Return lightweight warning messages if multiple tasks overlap on the same date and time."""
+        tasks = owner.all_tasks()
+        warnings = []
+        seen_slots = {}
+
+        for task in tasks:
+            if task.is_completed:
+                continue
+            
+            slot_key = (task.due_date, task.time)
+            pet_name = task.pet.name if task.pet else "Unknown Pet"
+            
+            if slot_key in seen_slots:
+                original_task = seen_slots[slot_key]
+                orig_pet = original_task.pet.name if original_task.pet else "Unknown Pet"
+                warnings.append(
+                    f"⚠️ Conflict: '{task.title}' for {pet_name} overlaps with "
+                    f"'{original_task.title}' for {orig_pet} at {task.time} on {task.due_date}."
+                )
+            else:
+                seen_slots[slot_key] = task
+
+        return warnings
+
+    def generate_daily_schedule(self, owner: Owner, available_minutes: Optional[int] = None) -> List[CareTask]:
         """Choose and order tasks across all pets that fit the available time.
 
         Strategy:
-            1. Retrieve all incomplete tasks from every pet.
-            2. Sort by priority (high first), then shorter tasks first as a
-               tie-breaker so we can fit more high-value tasks.
-            3. Greedily add tasks while they fit in the remaining time.
-        Stores and returns the resulting plan.
+            1. Run conflict verification across existing tasks.
+            2. Retrieve and group all incomplete tasks from every pet.
+            3. Sort tasks using multi-key priority parameters (high priority first,
+               then shorter items first as a structural tie-breaker).
+            4. Greedily commit tasks while remaining within the available minutes.
         """
         if available_minutes is None:
             available_minutes = owner.available_minutes
+
+        # Refresh system conflict logs for UI warnings
+        self._active_warnings = self.check_conflicts(owner)
 
         candidates = self.collect_tasks(owner)
         candidates.sort(key=lambda t: (-t.priority_weight, t.duration))
         self._considered = candidates
 
-        plan: list = []
+        plan: List[CareTask] = []
         remaining = available_minutes
         for task in candidates:
             if task.duration <= remaining:
@@ -167,12 +246,23 @@ class ScheduleManager:
         return plan
 
     def get_schedule_explanation(self) -> str:
-        """Explain, in plain language, what made the plan and what got cut."""
-        if not self.daily_plan:
-            return "No tasks could be scheduled in the available time."
+        """Explain, in plain language, what made the plan, what got cut, and any structural warnings."""
+        lines = []
 
-        lines = ["Daily plan (chosen by priority, then shortest first):"]
-        clock = 8 * 60  # start the day at 08:00, in minutes since midnight
+        # 1. Print Active Conflicts/Warnings if they exist
+        if self._active_warnings:
+            lines.append("System Warnings:")
+            for warning in self._active_warnings:
+                lines.append(f"  {warning}")
+            lines.append("")
+
+        # 2. Output Active Schedule details
+        if not self.daily_plan:
+            lines.append("No tasks could be scheduled in the available time.")
+            return "\n".join(lines)
+
+        lines.append("Daily plan (chosen by priority, then shortest first):")
+        clock = 8 * 60  # start the simulated planning timeline day at 08:00
         for task in self.daily_plan:
             start = f"{clock // 60:02d}:{clock % 60:02d}"
             who = f"{task.pet.name} — " if task.pet else ""
@@ -182,6 +272,7 @@ class ScheduleManager:
             )
             clock += task.duration
 
+        # 3. List Dropouts / Omitted items
         planned_ids = {id(t) for t in self.daily_plan}
         cut = [t for t in self._considered if id(t) not in planned_ids]
         if cut:
