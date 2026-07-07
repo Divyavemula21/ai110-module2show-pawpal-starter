@@ -22,6 +22,8 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+---
+
 ## Getting started
 
 ### Setup
@@ -30,7 +32,6 @@ Your final app should:
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
 
 ### Suggested workflow
 
@@ -44,15 +45,6 @@ pip install -r requirements.txt
 
 ## 🖥️ Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
-
-```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
-```
 Owner: Jordan  (available today: 90 min)
 Pets:
   - Mochi (dog, age 3)  [2 task(s)]
@@ -69,11 +61,40 @@ Daily plan (chosen by priority, then shortest first):
 Not scheduled (ran out of time or lower priority):
   - Mochi — Grooming (45 min) [low]
 
+
+
+## Smarter Scheduling Features
+
+PawPal+ uses an intelligent scheduling layer built into the `ScheduleManager` class to optimize a pet owner's day:
+
+
+| Feature | Method(s) | Notes |
+|---------|-----------|-------|
+| Task sorting |ScheduleManager.generate_daily_schedule()
+ScheduleManager.sort_by_time() | Sorts items chronologically for the timeline view, or optimizes greedily by priority (highest first) and duration (shortest first) to maximize your time budget. |
+| Filtering | ScheduleManager.filter_tasks()| Skips tasks that do not fit within the owner's remaining available hours and splits out omitted items. Also allows filtering by pet name.|
+| Conflict handling | ScheduleManager.check_conflicts()| Utilizes an optimized tracking hash-map to flag overlapping tasks scheduled for the exact same date and time. |
+| Recurring tasks | cheduleManager.complete_task_and_recur()| Automatically calculates the next due date (+1 day for daily, +7 days for weekly) and appends a fresh tracking placeholder.|
+
+## 📸 Demo Walkthrough
+
+To interact with the application, launch the UI using streamlit run app.py and try this example flow:
+
+Configure Owner Profile: In the 👤 Owner panel, change the name and update your available hours (e.g., set to 4.0 hours). Click Save owner.
+
+Register a Pet: In the 🐕 Add a pet section, add a pet name (e.g., "Mochi"), select its species, enter its age, and click Add pet.
+
+Schedule Tasks: Under 📋 Add a task, pick your pet, enter a task description (e.g., "Morning Walk"), set the duration to 30, pick a priority level, and click Schedule Task. Add a second task at the exact same time slot to watch the system catch a conflict!
+
+Generate the Schedule: Scroll to 🗓️ Build Schedule and click Generate schedule. The app will automatically output your optimized day list or print active system warnings if there are scheduling conflicts
+
+
 ## 🧪 Testing PawPal+
 
 ```bash
 # Run the full test suite:
-pytest
+
+python -m pytest -v
 
 # Run with coverage:
 pytest --cov
@@ -81,29 +102,60 @@ pytest --cov
 
 Sample test output:
 
-```
+
 # Paste your pytest output here
+
+============================= test session starts ==============================
+collected 5 items
+
+tests/test_pawpal.py::test_task_completion_changes_status PASSED          [ 20%]
+tests/test_pawpal.py::test_adding_task_increases_pet_task_count PASSED    [ 40%]
+tests/test_pawpal.py::test_task_sorting_chronological PASSED              [ 60%]
+tests/test_pawpal.py::test_recurrence_logic PASSED                        [ 80%]
+tests/test_pawpal.py::test_conflict_detection PASSED                      [100%]
+
+============================== 5 passed in 0.08s ===============================
+
+Confidence Level: ⭐⭐⭐⭐⭐ (5/5 stars)
+
+# Project Structure
+
+```
+PawPal+
+│
+├── app.py
+├── pawpal_system.py
+├── main.py
+├── tests
+│   └── test_pawpal.py
+├── diagrams
+│   └── uml_final.mmd
+├── README.md
+└── reflection.md
 ```
 
-## 📐 Smarter Scheduling
+---
 
-> Fill in once you've implemented scheduling logic.
+# Technologies Used
 
-| Feature | Method(s) | Notes |
-|---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+- Python
+- Streamlit
+- Dataclasses
+- Pytest
 
-## 📸 Demo Walkthrough
+---
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+# Future Improvements
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+- Calendar view
+- Email reminders
+- Notifications
+- Drag-and-drop scheduling
+- Mobile-friendly interface
+- Database support
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+---
+
+# Author
+
+Divyasree Vemula

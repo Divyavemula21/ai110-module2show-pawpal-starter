@@ -1,0 +1,39 @@
+classDiagram
+    %% PawPal+ — daily pet care planning assistant
+    %% Four core classes: Owner, Pet, CareTask, ScheduleManager
+
+    class Owner {
+        +String name
+        +float available_hours
+        +dict preferences
+        +update_profile(name, available_hours) void
+    }
+
+    class Pet {
+        +String name
+        +String pet_type
+        +int age
+        +get_profile_summary() String
+    }
+
+    class CareTask {
+        +String title
+        +int duration
+        +String priority
+        +bool is_completed
+        +update_task_details(duration, priority) void
+        +toggle_complete() void
+    }
+
+    class ScheduleManager {
+        +List~CareTask~ tasks
+        +List~CareTask~ daily_plan
+        +add_task(task) void
+        +remove_task(task_id) void
+        +generate_daily_schedule(available_minutes) List~CareTask~
+        +get_schedule_explanation() String
+    }
+
+    Owner "1" --> "0..*" Pet : cares for
+    Owner "1" --> "1" ScheduleManager : uses
+    ScheduleManager "1" o-- "0..*" CareTask : manages

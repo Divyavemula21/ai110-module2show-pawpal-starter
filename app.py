@@ -125,6 +125,13 @@ if st.button("Generate schedule"):
     elif owner.available_minutes <= 0:
         st.warning("Set the owner's available hours above so there's time to plan.")
     else:
+        # 1. Generate the plan (this automatically freshens conflict warnings under the hood)
         owner.schedule.generate_daily_schedule(owner)
+        
+        # 2. Display any active conflict warnings in a native Streamlit warning box
+        if owner.schedule._active_warnings:
+            for warning in owner.schedule._active_warnings:
+                st.warning(warning)
+        
         st.markdown("#### Today's Schedule")
         st.text(owner.schedule.get_schedule_explanation())
